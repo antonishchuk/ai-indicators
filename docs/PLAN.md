@@ -100,7 +100,8 @@
 
 | Индикатор | Зачем | Источник |
 |---|---|---|
-| OpenRouter rankings: токены/неделю по модели и вендору | прямой объём спроса | `openrouter.ai/rankings` — проверить, есть ли JSON; иначе scrape |
+| OpenRouter rankings: токены/день по модели, токены/неделю по вендору | прямой объём спроса | **сделано** (`openrouter_usage`): `api/frontend/v1/rankings/models?view=day`, `rankings/author-market-share`, `rankings/open-closed`; бэкфилл 30 дней через `stats/model-activity` |
+| Ramp AI Index: расход на токены $/нед по вендору, цена фактически оплаченная, adoption | спрос в деньгах (данные графика Citrini) | **сделано** (`ramp`, `fred`): `ramp.com/data/ai-index/chart-data/tokenVolumes`, `tokenPrices`; adoption через FRED RAMPAI* |
 | PyPI downloads `openai`, `anthropic`, `litellm`, `langchain` | developer adoption | `pypistats.org/api/packages/{pkg}/recent`, без ключа |
 | npm downloads `openai`, `@anthropic-ai/sdk`, `ai` | то же для JS | `api.npmjs.org/downloads/point/last-week/{pkg}` |
 | Hugging Face downloads топ open-weight моделей | спрос на open-weight | `huggingface.co/api/models?sort=downloads&limit=50` |

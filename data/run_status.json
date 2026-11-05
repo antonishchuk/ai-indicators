@@ -1,20 +1,8 @@
 {
  "date": "2026-11-05",
  "ok": [
-  "openrouter",
-  "openrouter_endpoints",
-  "litellm",
-  "llm_prices",
-  "ornn",
-  "runpod",
-  "gpuperhour",
-  "yahoo",
-  "edgar",
   "fred",
-  "pypistats",
-  "npm"
+  "ramp"
  ],
- "failed": [
-  "tsmc"
- ]
+ "failed": []
 }

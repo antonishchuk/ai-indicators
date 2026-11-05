@@ -34,6 +34,25 @@ OPENROUTER_FIRST_PARTY = {
     "mistralai": ("Mistral",),
 }
 
+# OpenRouter author slug (prefix of the model id) -> label, for the usage/demand charts.
+OPENROUTER_AUTHOR_LABEL = {
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "google": "Google",
+    "x-ai": "xAI",
+    "deepseek": "DeepSeek",
+    "moonshotai": "Kimi (Moonshot)",
+    "qwen": "Qwen (Alibaba)",
+    "z-ai": "Z.ai (GLM)",
+    "minimax": "MiniMax",
+    "mistralai": "Mistral",
+    "meta-llama": "Meta (Llama)",
+    "tencent": "Tencent",
+    "nvidia": "NVIDIA",
+    "xiaomi": "Xiaomi",
+    "stepfun": "StepFun",
+}
+
 VENDOR_LABEL = {
     "openai": "OpenAI",
     "anthropic": "Anthropic",

@@ -14,6 +14,11 @@ URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
 SERIES = {
     "BAMLH0A0HYM2": ("hy_oas", "pct"),  # ICE BofA US High Yield OAS
     "DHHNGSP": ("henry_hub", "usd_per_mmbtu"),
+    # Ramp AI Index: share of US businesses (Ramp customers) paying for AI, monthly. Citation required: Ramp, via FRED.
+    "RAMPAIALL": ("ai_adoption", "pct"),
+    "RAMPAIOPENAI": ("ai_adoption", "pct"),
+    "RAMPAIANTHROPIC": ("ai_adoption", "pct"),
+    "RAMPAIXAI": ("ai_adoption", "pct"),
 }
 
 

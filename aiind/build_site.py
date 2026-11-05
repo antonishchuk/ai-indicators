@@ -13,7 +13,8 @@ import statistics
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 
-from .basket import CLOSED, OPEN_WEIGHT, OPENROUTER_OPEN_WEIGHT, TIERS, VENDOR_LABEL
+from .basket import CLOSED, OPEN_WEIGHT, OPENROUTER_AUTHOR_LABEL, OPENROUTER_OPEN_WEIGHT, TIERS, VENDOR_LABEL
+from .collectors.openrouter_usage import split_entity
 from .store import RAW, ROOT, load_series
 
 SITE_DATA = ROOT / "site" / "data"
@@ -154,6 +155,193 @@ def release_cadence() -> dict:
     }
 
 
+# ----------------------------------------------------------------- OpenRouter usage (demand)
+SPEND_VENDORS = ["openai", "anthropic", "google", "x-ai", "deepseek", "moonshotai", "z-ai", "qwen", "minimax"]
+GROWTH_VENDORS = ["openai", "anthropic", "google", "deepseek"]
+SHARE_VENDORS = ["deepseek", "openai", "anthropic", "google", "z-ai", "x-ai"]
+TRILLION = 1e12
+
+
+def author_label(slug: str) -> str:
+    return OPENROUTER_AUTHOR_LABEL.get(slug, slug)
+
+
+def canonical_ids() -> dict[str, str]:
+    """OpenRouter canonical (dated) permaslug -> model id of the standard variant, from the raw snapshot.
+    Usage rows are keyed by permaslug, prices by id; 97% of tokens map this way."""
+    f = RAW / "openrouter_models.json"
+    out: dict[str, str] = {}
+    if f.exists():
+        for m in json.loads(f.read_bytes())["data"]:
+            if ":" not in m["id"] and m.get("canonical_slug"):
+                out[m["canonical_slug"]] = m["id"]
+    return out
+
+
+def price_on(orp: dict, pid: str, metric: str, day: str) -> float | None:
+    """OpenRouter $/1M on `day`; before the first price snapshot the earliest known price is used."""
+    pts = orp.get((pid, metric), [])
+    if not pts:
+        return None
+    v = value_at(pts, date.fromisoformat(day))
+    return pts[0][1] if v is None else v
+
+
+def spend_by_vendor(oru: dict, orp: dict, canon: dict[str, str]) -> tuple[dict, dict, dict]:
+    """Estimated $ per vendor per day = tokens x cheapest routed OpenRouter price of that day.
+    Cached prompt tokens at the cache-read price, free variants at zero, batch at half list when unlisted.
+    Returns (usd[vendor][day], tokens[day], priced_tokens[day])."""
+    usage: dict[str, dict[str, dict[str, float]]] = defaultdict(lambda: defaultdict(dict))
+    for (entity, metric), pts in oru.items():
+        if metric in ("prompt_tokens", "completion_tokens", "cached_tokens"):
+            for d, v in pts:
+                usage[entity][d][metric] = v
+    usd: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    tokens: dict[str, float] = defaultdict(float)
+    priced: dict[str, float] = defaultdict(float)
+    for entity, days in usage.items():
+        slug, variant = split_entity(entity)
+        vendor = slug.split("/")[0]
+        base = canon.get(slug)
+        for d, m in days.items():
+            prompt = m.get("prompt_tokens", 0.0)
+            comp = m.get("completion_tokens", 0.0)
+            cached = min(m.get("cached_tokens", 0.0), prompt)
+            tokens[d] += prompt + comp
+            if variant == "free":
+                priced[d] += prompt + comp
+                continue
+            if base is None:
+                continue
+            pid = base if variant == "standard" else f"{base}:{variant}"
+            pin, pout = price_on(orp, pid, "input", d), price_on(orp, pid, "output", d)
+            if pin is None and variant == "batch":
+                pin, pout = price_on(orp, base, "input", d), price_on(orp, base, "output", d)
+                if pin is not None:
+                    pin, pout = pin * 0.5, (pout or 0.0) * 0.5
+            if pin is None or pout is None:
+                continue
+            pcache = price_on(orp, pid, "cache_read", d)
+            if pcache is None:
+                pcache = pin
+            usd[vendor][d] += ((prompt - cached) * pin + cached * pcache + comp * pout) / 1e6
+            priced[d] += prompt + comp
+    return usd, tokens, priced
+
+
+def weekly_growth(pts: list[Pt], lag: int, window: int = 4) -> list[Pt]:
+    """Rolling `window`-week sum vs the same sum `lag` weeks earlier, in %. Weeks are Mondays;
+    a missing week (vendor out of the top 9) breaks the sums that would include it."""
+    if not pts:
+        return []
+    start = date.fromisoformat(pts[0][0])
+    n = (date.fromisoformat(pts[-1][0]) - start).days // 7 + 1
+    vals: list[float | None] = [None] * n
+    for d, v in pts:
+        vals[(date.fromisoformat(d) - start).days // 7] = v
+
+    def rsum(i: int) -> float | None:
+        if i - window + 1 < 0:
+            return None
+        chunk = vals[i - window + 1 : i + 1]
+        return None if any(c is None for c in chunk) else sum(chunk)
+
+    out: list[Pt] = []
+    for i in range(lag, n):
+        a, b = rsum(i), rsum(i - lag)
+        if a is not None and b:
+            out.append(((start + timedelta(weeks=i)).isoformat(), (a / b - 1) * 100))
+    return out
+
+
+def usage_charts(oru: dict, orp: dict) -> tuple[dict[str, dict], list[Pt], list[Pt]]:
+    """-> (indicators, total weekly tokens, total daily $ 7d mean) for the tiles."""
+    ind: dict[str, dict] = {}
+    # --- $ per day by vendor
+    usd, tokens, priced = spend_by_vendor(oru, orp, canonical_ids())
+    days = sorted(tokens)
+    total_usd = [(d, sum(m.get(d, 0.0) for m in usd.values())) for d in days]
+    coverage = [f"цена известна для {priced[d] / tokens[d] * 100:.0f}% токенов" if tokens[d] else "" for d in days]
+    spend_lines = [line("Всего", rolling_mean(total_usd), text=coverage, ci="total")]
+    for v in SPEND_VENDORS:
+        pts = [(d, usd[v].get(d, 0.0)) for d in days]
+        if any(y > 0 for _, y in pts):
+            spend_lines.append(line(author_label(v), rolling_mean(pts)))
+    rest = [(d, sum(m.get(d, 0.0) for vd, m in usd.items() if vd not in SPEND_VENDORS)) for d in days]
+    if any(y > 0 for _, y in rest):
+        spend_lines.append(line("Остальные", rolling_mean(rest)))
+    ind["or_spend"] = {"lines": spend_lines}
+
+    # --- weekly tokens by author: growth, share, total
+    weekly = {e: pts for (e, m), pts in oru.items() if m == "tokens_week" and e not in ("open_weight", "closed")}
+    weeks = sorted({d for pts in weekly.values() for d, _ in pts})
+    total_week: dict[str, float] = defaultdict(float)
+    for pts in weekly.values():
+        for d, v in pts:
+            total_week[d] += v
+    for key, lag in (("or_yoy", 52), ("or_qoq", 13)):
+        ind[key] = {"lines": [line(author_label(v), g, ci=VENDOR_COLOR.get(v, ci)) for ci, v in enumerate(GROWTH_VENDORS) if (g := weekly_growth(weekly.get(v, []), lag))]}
+    share_lines = []
+    for v in SHARE_VENDORS:
+        m = dict(weekly.get(v, []))
+        if m:
+            share_lines.append({"name": author_label(v), "x": weeks, "y": [m[d] / total_week[d] * 100 if d in m and total_week[d] else None for d in weeks]})
+    ind["or_share"] = {"lines": share_lines}
+    total_pts = [(d, total_week[d] / TRILLION) for d in weeks]
+    ind["or_total"] = {"lines": [line("Все модели, трлн токенов", total_pts)]}
+    op, cl = dict(oru.get(("open_weight", "tokens_week"), [])), dict(oru.get(("closed", "tokens_week"), []))
+    open_share = [(d, op[d] / (op[d] + cl[d]) * 100) for d in sorted(op) if d in cl and op[d] + cl[d]]
+    ind["or_open"] = {"lines": [line("Open-weight, % токенов", open_share)]}
+    return ind, [(d, total_week[d]) for d in weeks], rolling_mean(total_usd)
+
+
+# ----------------------------------------------------------------- Ramp AI Index (token spend in $)
+RAMP_LABEL = {"anthropic": "Anthropic", "openai": "OpenAI", "google": "Google", "xai": "xAI", "deepseek": "DeepSeek", "all": "Всего"}
+RAMP_MAKERS = ["anthropic", "openai", "google", "xai", "deepseek"]
+# one palette slot per vendor so a vendor keeps its color across the demand cards (series-1 .. series-8)
+VENDOR_COLOR = {"openai": 0, "anthropic": 1, "google": 2, "xai": 3, "x-ai": 3, "deepseek": 4, "moonshotai": 5, "z-ai": 6, "all": "total"}
+LOG_FLOOR_USD = 100.0  # below this a weekly amount is noise that drags a log axis to nano-dollars; shown as a gap
+
+
+def floor_log(pts: list[Pt], floor: float = LOG_FLOOR_USD) -> list[Pt]:
+    return [(d, v if v >= floor else None) for d, v in pts]
+
+
+def ramp_charts(ramp: dict, fred: dict) -> tuple[dict[str, dict], list[Pt], list[Pt]]:
+    """-> (indicators, total weekly spend, Anthropic share of spend) for the tiles."""
+    ind: dict[str, dict] = {}
+    spend = {e: pts for (e, m), pts in ramp.items() if m == "token_spend_week"}
+    total = spend.get("all", [])
+    tot = dict(total)
+    lines = [line("Всего", total, ci=VENDOR_COLOR["all"])]
+    for mk in RAMP_MAKERS:
+        if spend.get(mk):
+            lines.append(line(RAMP_LABEL[mk], floor_log(spend[mk]), ci=VENDOR_COLOR[mk]))
+    named = {d: sum(dict(spend.get(mk, [])).get(d, 0.0) for mk in RAMP_MAKERS) for d in tot}
+    rest = floor_log([(d, v - named[d]) for d, v in total])
+    if any(v for _, v in rest):
+        lines.append(line("Остальные", rest))
+    ind["ramp_spend"] = {"lines": lines}
+    for key, lag in (("ramp_yoy", 52), ("ramp_qoq", 13)):
+        ind[key] = {"lines": [line(RAMP_LABEL[mk], g, ci=VENDOR_COLOR[mk]) for mk in ("anthropic", "openai", "all") if (g := weekly_growth(spend.get(mk, []), lag))]}
+    ind["ramp_share"] = {"lines": [line(RAMP_LABEL[mk], [(d, v / tot[d] * 100) for d, v in spend[mk] if tot.get(d)], ci=VENDOR_COLOR[mk]) for mk in ("anthropic", "openai", "google", "xai") if spend.get(mk)]}
+    paid = []
+    for mk in ("openai", "anthropic"):
+        for tt, lbl, dash in (("all_tokens", "все токены", None), ("output", "output", "dot")):
+            pts = ramp.get((mk, f"paid_{tt}"), [])
+            if pts:
+                paid.append(line(f"{RAMP_LABEL[mk]}, {lbl}", pts, ci=VENDOR_COLOR[mk], **({"dash": dash} if dash else {})))
+    ind["tok_paid"] = {"lines": paid}
+    adoption = []
+    for sid, lbl, ci in (("RAMPAIALL", "Все вендоры", "total"), ("RAMPAIOPENAI", "OpenAI", 0), ("RAMPAIANTHROPIC", "Anthropic", 1), ("RAMPAIXAI", "xAI", 3)):
+        pts = fred.get((sid, "ai_adoption"), [])
+        if pts:
+            adoption.append(line(lbl, pts, ci=ci))
+    ind["ramp_adoption"] = {"lines": adoption}
+    anth_share = next((list(zip(l["x"], l["y"])) for l in ind["ramp_share"]["lines"] if l["name"] == "Anthropic"), [])
+    return ind, total, anth_share
+
+
 # ----------------------------------------------------------------- capex
 def quarter_label(d: str) -> str:
     y, m = int(d[:4]), int(d[5:7])
@@ -192,10 +380,13 @@ def build() -> dict:
     runpod = source_map(df, "runpod")
     lite = source_map(df, "litellm")
     orep = source_map(df, "openrouter_endpoints")
+    orp = source_map(df, "openrouter")
+    oru = source_map(df, "openrouter_usage")
+    ramp = source_map(df, "ramp")
     tsmc = source_map(df, "tsmc")
     edgar = source_map(df, "edgar")
-    yahoo = source_map(df, "yahoo")
     fred = source_map(df, "fred")
+    yahoo = source_map(df, "yahoo")
     pypi = source_map(df, "pypistats")
     npm = source_map(df, "npm")
 
@@ -271,6 +462,12 @@ def build() -> dict:
     ind["tok_events"] = {"rows": price_events(lite)}
     ind["tok_releases"] = release_cadence()
 
+    # --- Demand (Ramp token spend, OpenRouter usage)
+    ramp_ind, ramp_total_week, ramp_anth_share = ramp_charts(ramp, fred)
+    ind.update(ramp_ind)
+    usage_ind, or_total_week, or_usd_day = usage_charts(oru, orp)
+    ind.update(usage_ind)
+
     # --- Supply chain, capex, markets
     rev = tsmc.get(("TSMC", "revenue_ntd_m"), [])
     yoy = []
@@ -330,6 +527,10 @@ def build() -> dict:
         tile("nvda", "NVDA", nvda, "usd", 30),
         tile("hy", "HY спред", hy, "pct", 30, "ICE BofA OAS"),
         tile("pypi", "PyPI openai+anthropic", pypi_ai, "count", 30, "скачиваний в день, 7д среднее"),
+        tile("ramp_spend", "Ramp: расход на токены", ramp_total_week, "usd_big", 91, "$ в неделю, выборка TSM"),
+        tile("ramp_anth", "Ramp: доля Anthropic", ramp_anth_share, "pct", 91, "в расходах на токены"),
+        tile("or_tokens", "OpenRouter, токенов", or_total_week, "tokens", 91, "за неделю, все модели"),
+        tile("or_usd", "OpenRouter, расход", or_usd_day, "usd_big", 30, "$ в день, оценка, 7д среднее"),
     ]
 
     status_file = ROOT / "data" / "run_status.json"

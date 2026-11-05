@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI Leading Indicators</title>
 <meta name="description" content="Опережающие индикаторы AI-цикла: цены аренды GPU, цены токенов LLM, TSMC, capex hyperscalers, кредит, adoption. Обновляется ежедневно.">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=4">
 <script src="vendor/plotly-basic.min.js" charset="utf-8"></script>
 </head>
 <body>
@@ -21,6 +21,7 @@
       <a href="#overview">Сводка</a>
       <a href="#compute">GPU</a>
       <a href="#tokens">Токены</a>
+      <a href="#demand">Спрос</a>
       <a href="#supply">Поставки и capex</a>
       <a href="#adoption">Adoption</a>
       <a href="#method">Метод</a>
@@ -46,6 +47,12 @@
     <h2>Цена продукта: токены LLM</h2>
     <p class="lead">Цена за миллион токенов это цена, по которой лаборатории продают «интеллект». Frontier-модели показывают ценовую власть, workhorse-модели дефляцию стоимости инференса, open-weight модели конкурентное давление из Китая.</p>
     <div class="grid" id="cards-tokens"></div>
+  </section>
+
+  <section id="demand">
+    <h2>Спрос на токены: деньги и объём</h2>
+    <p class="lead">Прейскурант выше меняется ступенями, спрос меняется каждую неделю. Два источника. Ramp видит деньги: сколько американские компании платят по картам за API-токены, по производителям моделей, с января 2025 года, в долларах. OpenRouter видит токены: сколько прошло через его маршрутизатор по каждой модели за день. Первое смещено к корпоративному сегменту США, второе к разработчикам агентов и open-weight моделям. Расход это объём, умноженный на цену, поэтому вместе они позволяют отличить падение спроса от снижения цен.</p>
+    <div class="grid" id="cards-demand"></div>
   </section>
 
   <section id="supply">
@@ -75,6 +82,6 @@
 <footer class="wrap">
   <p>Открытые данные, обновление ежедневно. Код и parquet-файлы: <a href="https://github.com/antonishchuk/ai-indicators">github.com/antonishchuk/ai-indicators</a>.</p>
 </footer>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

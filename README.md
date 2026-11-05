@@ -17,7 +17,7 @@ aiind/basket.py     curated model tiers per vendor (chains of LiteLLM keys) + Op
 aiind/store.py      data/raw/<source> (overwritten; history in git) and data/series.parquet
 aiind/run.py        CLI runner; writes data/run_status.json
 aiind/build_site.py derives everything the page shows -> site/data/dashboard.json
-scripts/            back-fill scripts (LiteLLM git history)
+scripts/            back-fill scripts (LiteLLM git history, OpenRouter 30-day usage)
 site/               static dashboard (Plotly.js), Russian UI with an explanation per indicator
 data/series.parquet long table: date, ts, source, entity, metric, value, unit, meta
 tests/              parse tests against the committed raw snapshots
@@ -46,6 +46,12 @@ Back-fill token price history from LiteLLM's git log (weekly snapshots since 202
 python scripts/backfill_litellm.py --since 2024-01-01
 ```
 
+Back-fill 30 days of per-model OpenRouter usage (one request per model variant, ~750, throttled):
+
+```
+python scripts/backfill_openrouter_activity.py
+```
+
 ## Query
 
 ```python
@@ -60,6 +66,9 @@ df.filter(pl.col("source") == "gpuperhour").pivot("entity", index="date", values
 |---|---|---|---|
 | openrouter | cheapest routed $/1M for 450+ models, `created` for release cadence | daily since 2026-11-05 | none |
 | openrouter_endpoints | per-provider prices for 13 open-weight models: providers, min, median, first-party | daily | none |
+| openrouter_usage | tokens and requests per model per day (all ~650 active models), weekly tokens per author (top-9 + others) and open-weight vs closed | daily since 2026-10-06 (back-fill); weekly from 2025-11 | none; undocumented `api/frontend/v1` |
+| ramp | Ramp AI Index token spend: weekly $ and tokens per model maker (Token Spend Management sample), daily blended $/1M actually paid for OpenAI and Anthropic | weekly from 2025-01, daily from 2025-01 | none; undocumented `chart-data` endpoints |
+| fred (Ramp) | share of US businesses paying for AI: all, OpenAI, Anthropic, xAI (RAMPAI*) | monthly since 2023-01 | none |
 | litellm | first-party chat models of tracked vendors, $/1M | weekly from 2024-01 (git) | none |
 | llm_prices | curated first-party list prices, $/1M | daily | none |
 | ornn | OCPI transaction index $/GPU-hour: H100 SXM, H200, B200, A100 | daily | none |
@@ -73,4 +82,12 @@ df.filter(pl.col("source") == "gpuperhour").pivot("entity", index="date", values
 | npm | daily downloads: openai, @anthropic-ai/sdk, ai, @google/genai, @modelcontextprotocol/sdk | 365d | none |
 
 Vast.ai is deliberately not used: its ToS forbids building price indices.
+
+OpenRouter usage comes from the undocumented endpoints behind
+openrouter.ai/rankings. OpenRouter's terms forbid automated copying of site
+data in general wording; the collector therefore pulls aggregate public
+statistics only, three requests a day, and identifies itself in the
+User-Agent. Ramp data is free to use with attribution ("Ramp AI Index,
+ramp.com/data/ai-index"); the token series are the same ones behind the
+Citrini Research "rolling 4-week token spend growth" chart and reproduce it.
 Artificial Analysis (intelligence index) needs a free API key and attribution; not wired yet.
