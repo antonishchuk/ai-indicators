@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import polars as pl
@@ -55,5 +56,7 @@ def append_rows(rows: list[Row]) -> tuple[int, int]:
         .sort(["date", "source", "entity", "metric"])
     )
     DATA.mkdir(parents=True, exist_ok=True)
-    merged.write_parquet(SERIES, compression="zstd")
+    tmp = SERIES.with_suffix(".parquet.tmp")
+    merged.write_parquet(tmp, compression="zstd")
+    os.replace(tmp, SERIES)  # atomic swap so readers never see a partial file
     return merged.height - before, merged.height

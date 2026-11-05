@@ -7,6 +7,7 @@ thousands of reseller rows (bedrock/, azure/, vertex_ai/...).
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from ..model import USD_PER_MTOK, Row, now_utc
 from .base import Collector, fnum
@@ -45,8 +46,8 @@ class LiteLLM(Collector):
             r.raise_for_status()
             return r.content
 
-    def parse(self, raw: bytes) -> list[Row]:
-        ts = now_utc()
+    def parse(self, raw: bytes, ts: datetime | None = None) -> list[Row]:
+        ts = ts or now_utc()
         rows: list[Row] = []
         for key, m in json.loads(raw).items():
             if key == "sample_spec" or not isinstance(m, dict):

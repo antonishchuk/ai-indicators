@@ -6,6 +6,7 @@ The index updates hourly; our daily row is the value at collection time.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from ..model import USD_PER_GPU_HOUR, Row, now_utc
 from .base import Collector
@@ -33,8 +34,8 @@ class Ornn(Collector):
                 out[gpu] = r.json()
         return json.dumps(out).encode()
 
-    def parse(self, raw: bytes) -> list[Row]:
-        ts = now_utc()
+    def parse(self, raw: bytes, ts: datetime | None = None) -> list[Row]:
+        ts = ts or now_utc()
         rows: list[Row] = []
         for gpu, payload in json.loads(raw).items():
             if not payload.get("success"):

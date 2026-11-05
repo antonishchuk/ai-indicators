@@ -4,9 +4,18 @@ on:
   schedule:
     - cron: "15 6 * * *"   # daily 06:15 UTC
   workflow_dispatch:
+  push:
+    branches: [master]
+    paths-ignore:
+      - "data/**"
+      - "site/data/**"
+      - "docs/**"
+      - "README.md"
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: collect
@@ -26,14 +35,17 @@ jobs:
       - run: pip install -e .
 
       - name: Collect
+        continue-on-error: true   # a dead source must not block the site build; failures land in data/run_status.json
         run: python -m aiind.run
 
+      - name: Build site
+        run: python -m aiind.build_site
+
       - name: Commit data
-        if: always()
         run: |
           git config user.name "ai-indicators bot"
           git config user.email "actions@users.noreply.github.com"
-          git add data
+          git add data site/data
           if git diff --cached --quiet; then
             echo "no data changes"
           else
@@ -41,3 +53,18 @@ jobs:
             git pull --rebase
             git push
           fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: collect
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

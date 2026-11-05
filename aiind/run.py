@@ -10,12 +10,14 @@ any failed so the workflow run shows red.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 import traceback
+from datetime import date
 
 from .collectors import REGISTRY
-from .store import RAW, append_rows, save_raw
+from .store import DATA, RAW, append_rows, save_raw
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -47,6 +49,10 @@ def main(argv: list[str] | None = None) -> int:
             failed.append(name)
             print(f"[{name}] FAILED", file=sys.stderr)
             traceback.print_exc()
+    status = {"date": date.today().isoformat(), "ok": [n for n in names if n not in failed], "failed": failed}
+    if not args.reparse:
+        DATA.mkdir(parents=True, exist_ok=True)
+        (DATA / "run_status.json").write_text(json.dumps(status, indent=1), encoding="utf-8")
     if failed:
         print(f"failed: {failed}", file=sys.stderr)
         return 1

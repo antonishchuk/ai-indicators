@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from ..model import USD_PER_GPU_HOUR, Row, now_utc
 from .base import Collector, fnum
@@ -40,8 +41,8 @@ class RunPod(Collector):
             r.raise_for_status()
             return r.content
 
-    def parse(self, raw: bytes) -> list[Row]:
-        ts = now_utc()
+    def parse(self, raw: bytes, ts: datetime | None = None) -> list[Row]:
+        ts = ts or now_utc()
         rows: list[Row] = []
         for g in json.loads(raw)["data"]["gpuTypes"]:
             entity = GPUS.get(g["id"])

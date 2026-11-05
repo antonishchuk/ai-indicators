@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from ..model import USD_PER_MTOK, Row, now_utc
 from .base import Collector, fnum
@@ -19,8 +20,8 @@ class LlmPrices(Collector):
             r.raise_for_status()
             return r.content
 
-    def parse(self, raw: bytes) -> list[Row]:
-        ts = now_utc()
+    def parse(self, raw: bytes, ts: datetime | None = None) -> list[Row]:
+        ts = ts or now_utc()
         doc = json.loads(raw)
         rows: list[Row] = []
         for p in doc["prices"]:

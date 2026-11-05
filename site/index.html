@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Leading Indicators</title>
+<meta name="description" content="Опережающие индикаторы AI-цикла: цены аренды GPU, цены токенов LLM, TSMC, capex hyperscalers, кредит, adoption. Обновляется ежедневно.">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js" charset="utf-8"></script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1>AI Leading Indicators</h1>
+    <p class="sub">Опережающие индикаторы AI-цикла, собранные из открытых источников раз в сутки.
+      Логика простая: <b>предложение</b> вычислений (цены аренды GPU), <b>цена продукта</b> (токены LLM),
+      <b>цепочка поставок и capex</b> (TSMC, hyperscalers), <b>финансирование</b> (кредитные спреды) и <b>спрос разработчиков</b> (скачивания SDK).
+      Под каждым графиком написано, что он значит и как его читать.</p>
+    <p class="meta">Данные на <span id="generated">…</span> · <span id="rows"></span> наблюдений · <a id="repo" href="https://github.com/antonishchuk/ai-indicators">исходники и данные</a> <button class="toggle" id="theme-toggle" type="button">тема</button></p>
+    <nav>
+      <a href="#overview">Сводка</a>
+      <a href="#compute">GPU</a>
+      <a href="#tokens">Токены</a>
+      <a href="#supply">Поставки и capex</a>
+      <a href="#adoption">Adoption</a>
+      <a href="#method">Метод</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="overview">
+    <h2>Сводка</h2>
+    <div class="tiles" id="tiles"></div>
+    <p class="hint">Плитка показывает последнее значение и изменение за 30 или 90 дней. Синее изменение означает снижение, красное повышение. Оценка «хорошо/плохо» зависит от вашей позиции, поэтому цвет не несёт оценки.</p>
+  </section>
+
+  <section id="compute">
+    <h2>Вычисления: аренда GPU</h2>
+    <p class="lead">Спотовый рынок аренды GPU реагирует на баланс спроса и предложения за недели, тогда как выручка NVIDIA и capex видны раз в квартал. Падение цен при растущем числе продавцов говорит о переизбытке мощностей, рост цен о дефиците.</p>
+    <div class="grid" id="cards-compute"></div>
+  </section>
+
+  <section id="tokens">
+    <h2>Цена продукта: токены LLM</h2>
+    <p class="lead">Цена за миллион токенов это цена, по которой лаборатории продают «интеллект». Frontier-модели показывают ценовую власть, workhorse-модели дефляцию стоимости инференса, open-weight модели конкурентное давление из Китая.</p>
+    <div class="grid" id="cards-tokens"></div>
+  </section>
+
+  <section id="supply">
+    <h2>Цепочка поставок, capex, финансирование</h2>
+    <p class="lead">Деньги hyperscalers превращаются в заказы TSMC и выручку NVIDIA. Месячная выручка TSMC выходит раньше квартальных отчётов, а кредитные спреды показывают, насколько дёшево финансируется стройка дата-центров.</p>
+    <div class="grid" id="cards-supply"></div>
+  </section>
+
+  <section id="adoption">
+    <h2>Спрос разработчиков</h2>
+    <p class="lead">Скачивания SDK это грубый, но ежедневный прокси того, сколько кода реально вызывает модели. Рост объёмов должен компенсировать падение цен на токены, иначе выручка лабораторий не растёт.</p>
+    <div class="grid" id="cards-adoption"></div>
+  </section>
+
+  <section id="method">
+    <h2>Метод и ограничения</h2>
+    <div class="prose">
+      <p><b>Как это собирается.</b> Раз в сутки GitHub Actions опрашивает источники, складывает сырые ответы и нормализованные ряды в parquet прямо в репозитории и пересобирает эту страницу. История цен токенов восстановлена из git-истории файла цен LiteLLM, по одному снимку в неделю с января 2024 года, поэтому даты изменений цен точны до недели.</p>
+      <p><b>Как устроены уровни моделей.</b> Для каждого вендора вручную задана цепочка моделей по уровням: frontier (самая сильная), mid (основная рабочая), small (самая дешёвая). На каждую дату берётся цена новейшей модели цепочки, которая уже существовала. Наведите на линию, чтобы увидеть, какая модель стоит за точкой. Разбиение по уровням субъективно, особенно там, где вендор меняет линейку.</p>
+      <p><b>Чего здесь нет.</b> Закупочных цен B200/B300/GB200 (их не публикуют), аренды Rubin, контрактных цен HBM, реальных цен продажи б/у H100, объёмов токенов у самих лабораторий. Индекс интеллекта Artificial Analysis и «цена за балл интеллекта» появятся после подключения их API.</p>
+      <p><b>Источники.</b> gpuperhour.com, Ornn Compute Price Index, RunPod, OpenRouter, LiteLLM, llm-prices.com, SEC EDGAR, TSMC IR, FRED, Yahoo Finance, pypistats.org, npm. Цены аренды это цены предложения, а не сделки, кроме индекса Ornn. Ничего из этого не является инвестиционной рекомендацией.</p>
+      <p id="status"></p>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <p>Открытые данные, обновление ежедневно. Код и parquet-файлы: <a href="https://github.com/antonishchuk/ai-indicators">github.com/antonishchuk/ai-indicators</a>.</p>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>

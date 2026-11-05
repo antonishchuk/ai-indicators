@@ -1,21 +1,23 @@
 from __future__ import annotations
 
 import abc
+from datetime import datetime
 from typing import Any
 
 import httpx
 
 from ..model import Row
 
-USER_AGENT = "ai-indicators/0.1 (personal research dashboard; github.com/antonishchuk/ai-indicators)"
+USER_AGENT = "ai-indicators/0.1 (personal research dashboard; contact aofo.uae@gmail.com)"
 
 
 class Collector(abc.ABC):
     """A collector fetches one external source and turns it into rows.
 
-    `fetch` does I/O and returns the raw payload (bytes/str). `parse` is pure
-    and testable against a saved raw file. `raw_name` is the file written to
-    data/raw/.
+    `fetch` does I/O and returns the raw payload (bytes). `parse` is pure and
+    testable against a saved raw file; `ts` overrides the observation time
+    (used by back-fill scripts that replay historical snapshots). `raw_name`
+    is the file written to data/raw/.
     """
 
     name: str
@@ -33,7 +35,7 @@ class Collector(abc.ABC):
     def fetch(self) -> bytes: ...
 
     @abc.abstractmethod
-    def parse(self, raw: bytes) -> list[Row]: ...
+    def parse(self, raw: bytes, ts: datetime | None = None) -> list[Row]: ...
 
 
 def fnum(x: Any) -> float | None:
@@ -41,6 +43,6 @@ def fnum(x: Any) -> float | None:
     if x is None or x == "":
         return None
     try:
-        return float(x)
+        return float(str(x).replace(",", ""))
     except (TypeError, ValueError):
         return None
