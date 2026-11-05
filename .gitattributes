@@ -1,0 +1,3 @@
+# Keep LF everywhere so the Linux bot and Windows checkouts produce identical diffs
+* text=auto eol=lf
+*.parquet binary
