@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI Leading Indicators</title>
 <meta name="description" content="Опережающие индикаторы AI-цикла: цены аренды GPU, цены токенов LLM, TSMC, capex hyperscalers, кредит, adoption. Обновляется ежедневно.">
-<link rel="stylesheet" href="style.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js" charset="utf-8"></script>
+<link rel="stylesheet" href="style.css?v=2">
+<script src="vendor/plotly-basic.min.js" charset="utf-8"></script>
 </head>
 <body>
 <header class="top">
@@ -33,6 +33,7 @@
     <h2>Сводка</h2>
     <div class="tiles" id="tiles"></div>
     <p class="hint">Плитка показывает последнее значение и изменение за 30 или 90 дней. Синее изменение означает снижение, красное повышение. Оценка «хорошо/плохо» зависит от вашей позиции, поэтому цвет не несёт оценки.</p>
+    <p class="hint">Графики интерактивные: кнопки 1м/3м/6м/1г над графиком переключают окно, выделение мышью приближает период, двойной клик возвращает весь диапазон, клик по названию в легенде скрывает линию, наведение показывает значения и модель за точкой.</p>
   </section>
 
   <section id="compute">
@@ -74,6 +75,6 @@
 <footer class="wrap">
   <p>Открытые данные, обновление ежедневно. Код и parquet-файлы: <a href="https://github.com/antonishchuk/ai-indicators">github.com/antonishchuk/ai-indicators</a>.</p>
 </footer>
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

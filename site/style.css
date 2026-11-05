@@ -109,6 +109,10 @@ h2 { font-size: 20px; margin: 0 0 8px; }
 .chart { width: 100%; height: 280px; }
 .card.wide .chart { height: 320px; }
 .chart.auto, .card.wide .chart.auto { height: auto; }
+.ranges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; margin: -2px 0 4px; }
+.ranges button { font: inherit; font-size: 11px; line-height: 1.4; padding: 1px 9px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text-2); cursor: pointer; }
+.ranges button:hover { background: var(--surface-2); }
+.ranges button.on { background: var(--mid); color: var(--text); border-color: var(--text-3); }
 .toggle { background: none; border: 1px solid var(--border); color: var(--text-2); border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer; margin-left: 10px; }
 .explain { margin-top: 8px; font-size: 14px; color: var(--text-2); }
 .explain p { margin: 6px 0; }

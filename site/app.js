@@ -188,6 +188,7 @@
       series,
       text: cssVar("--text"),
       text2: cssVar("--text-2"),
+      text3: cssVar("--text-3"),
       grid: cssVar("--grid"),
       surface: cssVar("--surface"),
       border: cssVar("--border"),
@@ -203,16 +204,24 @@
       hovermode: "x unified",
       hoverlabel: { bgcolor: t.surface, bordercolor: t.border, font: { color: t.text, size: 12 } },
       legend: { orientation: "h", x: 0, y: 1.12, font: { size: 12 }, itemwidth: 30 },
+      // Drag zooms the time axis only: y is fixed for the drag and then refitted to the visible window (fitY).
+      // On touch screens a drag must scroll the page, so drag-zoom is off there and the range buttons do the job.
+      dragmode: TOUCH ? false : "zoom",
       xaxis: { gridcolor: t.grid, zeroline: false, linecolor: t.grid, tickfont: { size: 11 }, showspikes: false },
       yaxis: {
         gridcolor: t.grid, zeroline: false, linecolor: t.grid, tickfont: { size: 11 },
         type: card.log ? "log" : "linear", rangemode: card.log ? "normal" : "tozero",
         fixedrange: true,
       },
+      modebar: { bgcolor: "rgba(0,0,0,0)", color: t.text3, activecolor: t.text, orientation: "v" },
       showlegend: true,
     };
   }
-  const CONFIG = { displayModeBar: false, responsive: true, scrollZoom: false };
+  const TOUCH = window.matchMedia("(pointer: coarse)").matches;
+  const CONFIG = {
+    displayModeBar: "hover", displaylogo: false, responsive: true, scrollZoom: false, doubleClick: "reset",
+    modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d", "toggleSpikelines", "hoverClosestCartesian", "hoverCompareCartesian"],
+  };
 
   // ------------------------------------------------------------ renderers
   function renderLines(el, card, data, t) {
@@ -232,7 +241,108 @@
     });
     const layout = baseLayout(t, card);
     if (traces.length === 1) layout.showlegend = false;
-    Plotly.react(el, traces, layout, CONFIG);
+    if (isDateAxis(traces)) layout.xaxis.type = "date";
+    keepZoom(el, layout);
+    Plotly.react(el, traces, layout, CONFIG).then(() => bindZoom(el, card));
+  }
+
+  // ------------------------------------------------------------ zoom: range buttons, drag zoom, y refit
+  const RANGES = [[30, "1м"], [90, "3м"], [180, "6м"], [365, "1г"], [730, "2г"]];
+  const DAY = 864e5;
+
+  function isDateAxis(traces) {
+    const x = traces.length && traces[0].x[0];
+    return typeof x === "string" && /^\d{4}-\d{2}/.test(x);
+  }
+  function toMs(v) {
+    return Date.parse(String(v).replace(" ", "T"));
+  }
+  function isoDay(ms) {
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+
+  // Buttons for the windows that are meaningfully shorter than the series itself; "всё" is always there.
+  function rangeBar(card, data) {
+    if (card.kind !== "lines" || !data.lines) return "";
+    let first = Infinity, last = -Infinity;
+    for (const l of data.lines) for (const x of l.x || []) { const ms = toMs(x); if (ms < first) first = ms; if (ms > last) last = ms; }
+    if (!isFinite(first) || !isFinite(last)) return "";
+    const span = (last - first) / DAY;
+    const btns = RANGES.filter((r) => r[0] < span * 0.9).map((r) => '<button type="button" data-days="' + r[0] + '">' + r[1] + "</button>").join("");
+    if (!btns) return "";
+    return '<div class="ranges" data-last="' + last + '">' + btns + '<button type="button" data-days="all" class="on">всё</button></div>';
+  }
+  function markRange(el, key) {
+    const bar = el.parentElement && el.parentElement.querySelector(".ranges");
+    if (!bar) return;
+    for (const b of bar.querySelectorAll("button")) b.classList.toggle("on", key != null && b.dataset.days === String(key));
+  }
+  function setRange(el, days) {
+    el._byButton = true;
+    if (days === "all") {
+      Plotly.relayout(el, { "xaxis.autorange": true, "yaxis.autorange": true });
+    } else {
+      const last = Number(el.parentElement.querySelector(".ranges").dataset.last);
+      Plotly.relayout(el, { "xaxis.range": [isoDay(last - days * DAY), isoDay(last + DAY)], "xaxis.autorange": false });
+    }
+    markRange(el, days);
+  }
+
+  // A theme redraw (Plotly.react) must not throw away the window the user zoomed to.
+  function keepZoom(el, layout) {
+    const cur = el.layout;
+    if (!cur || !cur.xaxis || cur.xaxis.autorange !== false || !cur.xaxis.range) return;
+    layout.xaxis.range = cur.xaxis.range.slice();
+    layout.xaxis.autorange = false;
+    if (cur.yaxis && cur.yaxis.autorange === false && cur.yaxis.range) {
+      layout.yaxis.range = cur.yaxis.range.slice();
+      layout.yaxis.autorange = false;
+    }
+  }
+  function bindZoom(el, card) {
+    if (el._zoomBound) return;
+    el._zoomBound = true;
+    el.on("plotly_relayout", (ev) => {
+      const byButton = el._byButton;
+      el._byButton = false;
+      if (ev["xaxis.autorange"]) {
+        if (!ev["yaxis.autorange"]) Plotly.relayout(el, { "yaxis.autorange": true });
+        markRange(el, "all");
+      } else if (ev["xaxis.range[0]"] !== undefined || ev["xaxis.range"]) {
+        fitY(el, card);
+        if (!byButton) markRange(el, null);
+      }
+    });
+    el.on("plotly_legendclick", () => { setTimeout(() => { if (el.layout.xaxis.autorange === false) fitY(el, card); }, 0); });
+  }
+  // Plotly keeps the old y range when x is zoomed; refit y to the points inside the visible window.
+  function fitY(el, card) {
+    const xr = el.layout.xaxis && el.layout.xaxis.range;
+    if (!xr) return;
+    const lo = toMs(xr[0]), hi = toMs(xr[1]);
+    if (isNaN(lo) || isNaN(hi)) return;
+    let min = Infinity, max = -Infinity;
+    for (const tr of el.data) {
+      if (tr.visible === "legendonly" || !tr.x) continue;
+      for (let i = 0; i < tr.x.length; i++) {
+        const xv = toMs(tr.x[i]);
+        const y = tr.y[i];
+        if (xv < lo || xv > hi || y == null || isNaN(y)) continue;
+        if (y < min) min = y;
+        if (y > max) max = y;
+      }
+    }
+    if (!isFinite(min)) return;
+    let range;
+    if (card.log) {
+      const a = Math.log10(Math.max(min, 1e-9)), b = Math.log10(Math.max(max, 1e-9));
+      const pad = (b - a || 0.3) * 0.08;
+      range = [a - pad, b + pad];
+    } else {
+      const pad = (max - min || Math.abs(max) || 1) * 0.1;
+      range = [min >= 0 ? Math.max(0, min - pad) : min - pad, max + pad];
+    }
+    Plotly.relayout(el, { "yaxis.range": range, "yaxis.autorange": false });
   }
 
   function renderBars(el, card, data, t) {
@@ -342,12 +452,19 @@
     wrap.innerHTML =
       "<h3>" + card.title + '<span class="unit">' + card.unit + "</span></h3>" +
       '<div class="latest">' + (empty ? "нет данных, источник недоступен на момент сборки" : latestText(card, data)) + "</div>" +
+      (empty ? "" : rangeBar(card, data)) +
       '<div class="chart' + (card.kind === "table" || card.kind === "events" ? " auto" : "") + '"></div>' +
       '<div class="explain"><p><b>Что это.</b> ' + card.what + "</p><p><b>Как читать.</b> " + card.read + "</p>" +
       (card.caveat ? "<p><b>Оговорка.</b> " + card.caveat + "</p>" : "") +
       '<p class="src">Источник: ' + card.src + "</p></div>";
     document.getElementById("cards-" + card.section).appendChild(wrap);
-    return { el: wrap.querySelector(".chart"), empty };
+    const el = wrap.querySelector(".chart");
+    const bar = wrap.querySelector(".ranges");
+    if (bar) bar.addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (b) setRange(el, b.dataset.days === "all" ? "all" : Number(b.dataset.days));
+    });
+    return { el, empty };
   }
 
   function draw(card, data, el, t) {
