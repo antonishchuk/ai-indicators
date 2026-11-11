@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-09",
+  "updated_at": "2026-11-10",
   "prices": [
     {
       "id": "amazon-nova-micro",
@@ -509,6 +509,14 @@
       "id": "gemini-4-argon",
       "vendor": "google",
       "name": "Gemini 4 Argon",
+      "input": 2,
+      "output": 10,
+      "input_cached": 0.1
+    },
+    {
+      "id": "gemini-4-carbon",
+      "vendor": "google",
+      "name": "Gemini 4 Carbon",
       "input": 2,
       "output": 10,
       "input_cached": 0.1
