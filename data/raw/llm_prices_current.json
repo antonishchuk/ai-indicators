@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-10",
+  "updated_at": "2026-11-12",
   "prices": [
     {
       "id": "amazon-nova-micro",
@@ -520,6 +520,14 @@
       "input": 2,
       "output": 10,
       "input_cached": 0.1
+    },
+    {
+      "id": "gemini-4-hydrogen",
+      "vendor": "google",
+      "name": "Gemini 4 Hydrogen",
+      "input": 1.5,
+      "output": 7.5,
+      "input_cached": 0.075
     },
     {
       "id": "muse-wonder-1.0",
