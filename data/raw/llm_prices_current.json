@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-17",
+  "updated_at": "2026-11-18",
   "prices": [
     {
       "id": "amazon-nova-micro",
@@ -528,6 +528,14 @@
       "input": 1.5,
       "output": 7.5,
       "input_cached": 0.075
+    },
+    {
+      "id": "gemini-4-neon",
+      "vendor": "google",
+      "name": "Gemini 4 Neon",
+      "input": 3,
+      "output": 15,
+      "input_cached": 0.15
     },
     {
       "id": "muse-wonder-1.0",
