@@ -1,5 +1,5 @@
 {
- "date": "2026-11-19",
+ "date": "2026-11-20",
  "ok": [
   "openrouter",
   "openrouter_endpoints",
@@ -13,10 +13,10 @@
   "edgar",
   "fred",
   "pypistats",
-  "npm"
+  "npm",
+  "tsmc"
  ],
  "failed": [
-  "tsmc",
   "ramp"
  ]
 }
