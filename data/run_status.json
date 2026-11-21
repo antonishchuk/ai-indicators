@@ -14,9 +14,13 @@
   "fred",
   "pypistats",
   "npm",
-  "ramp"
+  "tsmc",
+  "ramp",
+  "ecos",
+  "componentprices",
+  "stanford_memory",
+  "diskprices",
+  "siliconanalysts"
  ],
- "failed": [
-  "tsmc"
- ]
+ "failed": []
 }
