@@ -295,38 +295,46 @@ def usage_charts(oru: dict, orp: dict) -> tuple[dict[str, dict], list[Pt], list[
     return ind, [(d, total_week[d]) for d in weeks], rolling_mean(total_usd)
 
 
-# ----------------------------------------------------------------- Ramp AI Index (token spend in $)
-RAMP_LABEL = {"anthropic": "Anthropic", "openai": "OpenAI", "google": "Google", "xai": "xAI", "deepseek": "DeepSeek", "all": "Всего"}
+# ----------------------------------------------------------------- Ramp AI Index (token spend index)
+RAMP_LABEL = {"anthropic": "Anthropic", "openai": "OpenAI", "google": "Google", "xai": "xAI", "deepseek": "DeepSeek", "all": "Всего", "blend": "Все вендоры"}
 RAMP_MAKERS = ["anthropic", "openai", "google", "xai", "deepseek"]
 # one palette slot per vendor so a vendor keeps its color across the demand cards (series-1 .. series-8)
-VENDOR_COLOR = {"openai": 0, "anthropic": 1, "google": 2, "xai": 3, "x-ai": 3, "deepseek": 4, "moonshotai": 5, "z-ai": 6, "all": "total"}
-LOG_FLOOR_USD = 100.0  # below this a weekly amount is noise that drags a log axis to nano-dollars; shown as a gap
+VENDOR_COLOR = {"openai": 0, "anthropic": 1, "google": 2, "xai": 3, "x-ai": 3, "deepseek": 4, "moonshotai": 5, "z-ai": 6, "all": "total", "blend": "total"}
+LOG_FLOOR_SHARE = 1e-4  # a line below this share of the latest total is noise that drags a log axis down; shown as a gap
 
 
-def floor_log(pts: list[Pt], floor: float = LOG_FLOOR_USD) -> list[Pt]:
+def floor_log(pts: list[Pt], floor: float) -> list[Pt]:
     return [(d, v if v >= floor else None) for d, v in pts]
 
 
 def ramp_charts(ramp: dict, fred: dict) -> tuple[dict[str, dict], list[Pt], list[Pt]]:
-    """-> (indicators, total weekly spend, Anthropic share of spend) for the tiles."""
+    """-> (indicators, YoY growth of total token spend, Anthropic share of spend) for the tiles.
+
+    Spend and volume are Ramp's index (undocumented units, see collectors/ramp.py): only
+    ratios are used here, i.e. growth rates, shares and relative levels on a log axis."""
     ind: dict[str, dict] = {}
-    spend = {e: pts for (e, m), pts in ramp.items() if m == "token_spend_week"}
+    spend = {e: pts for (e, m), pts in ramp.items() if m == "token_spend_index"}
+    volume_total = ramp.get(("all", "token_volume_index"), [])
     total = spend.get("all", [])
     tot = dict(total)
+    floor = (total[-1][1] if total else 0.0) * LOG_FLOOR_SHARE
     lines = [line("Всего", total, ci=VENDOR_COLOR["all"])]
     for mk in RAMP_MAKERS:
         if spend.get(mk):
-            lines.append(line(RAMP_LABEL[mk], floor_log(spend[mk]), ci=VENDOR_COLOR[mk]))
+            lines.append(line(RAMP_LABEL[mk], floor_log(spend[mk], floor), ci=VENDOR_COLOR[mk]))
     named = {d: sum(dict(spend.get(mk, [])).get(d, 0.0) for mk in RAMP_MAKERS) for d in tot}
-    rest = floor_log([(d, v - named[d]) for d, v in total])
+    rest = floor_log([(d, v - named[d]) for d, v in total], floor)
     if any(v for _, v in rest):
         lines.append(line("Остальные", rest))
     ind["ramp_spend"] = {"lines": lines}
     for key, lag in (("ramp_yoy", 52), ("ramp_qoq", 13)):
-        ind[key] = {"lines": [line(RAMP_LABEL[mk], g, ci=VENDOR_COLOR[mk]) for mk in ("anthropic", "openai", "all") if (g := weekly_growth(spend.get(mk, []), lag))]}
+        growth = [line(RAMP_LABEL[mk], g, ci=VENDOR_COLOR[mk]) for mk in ("anthropic", "openai", "all") if (g := weekly_growth(spend.get(mk, []), lag))]
+        if g := weekly_growth(volume_total, lag):
+            growth.append(line("Объём токенов, всего", g, ci="total", dash="dot"))
+        ind[key] = {"lines": growth}
     ind["ramp_share"] = {"lines": [line(RAMP_LABEL[mk], [(d, v / tot[d] * 100) for d, v in spend[mk] if tot.get(d)], ci=VENDOR_COLOR[mk]) for mk in ("anthropic", "openai", "google", "xai") if spend.get(mk)]}
     paid = []
-    for mk in ("openai", "anthropic"):
+    for mk in ("openai", "anthropic", "blend"):
         for tt, lbl, dash in (("all_tokens", "все токены", None), ("output", "output", "dot")):
             pts = ramp.get((mk, f"paid_{tt}"), [])
             if pts:
@@ -339,7 +347,8 @@ def ramp_charts(ramp: dict, fred: dict) -> tuple[dict[str, dict], list[Pt], list
             adoption.append(line(lbl, pts, ci=ci))
     ind["ramp_adoption"] = {"lines": adoption}
     anth_share = next((list(zip(l["x"], l["y"])) for l in ind["ramp_share"]["lines"] if l["name"] == "Anthropic"), [])
-    return ind, total, anth_share
+    yoy_total = next((list(zip(l["x"], l["y"])) for l in ind["ramp_yoy"]["lines"] if l["name"] == RAMP_LABEL["all"]), [])
+    return ind, yoy_total, anth_share
 
 
 # ----------------------------------------------------------------- capex
@@ -463,7 +472,7 @@ def build() -> dict:
     ind["tok_releases"] = release_cadence()
 
     # --- Demand (Ramp token spend, OpenRouter usage)
-    ramp_ind, ramp_total_week, ramp_anth_share = ramp_charts(ramp, fred)
+    ramp_ind, ramp_yoy_total, ramp_anth_share = ramp_charts(ramp, fred)
     ind.update(ramp_ind)
     usage_ind, or_total_week, or_usd_day = usage_charts(oru, orp)
     ind.update(usage_ind)
@@ -527,7 +536,7 @@ def build() -> dict:
         tile("nvda", "NVDA", nvda, "usd", 30),
         tile("hy", "HY спред", hy, "pct", 30, "ICE BofA OAS"),
         tile("pypi", "PyPI openai+anthropic", pypi_ai, "count", 30, "скачиваний в день, 7д среднее"),
-        tile("ramp_spend", "Ramp: расход на токены", ramp_total_week, "usd_big", 91, "$ в неделю, выборка TSM"),
+        {"id": "ramp_spend", "label": "Ramp: расходы на токены", "value": ramp_yoy_total[-1][1] if ramp_yoy_total else None, "date": ramp_yoy_total[-1][0] if ramp_yoy_total else None, "unit": "growth", "delta_pct": None, "note": "рост год к году, 4 недели"},
         tile("ramp_anth", "Ramp: доля Anthropic", ramp_anth_share, "pct", 91, "в расходах на токены"),
         tile("or_tokens", "OpenRouter, токенов", or_total_week, "tokens", 91, "за неделю, все модели"),
         tile("or_usd", "OpenRouter, расход", or_usd_day, "usd_big", 30, "$ в день, оценка, 7д среднее"),
