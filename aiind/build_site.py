@@ -351,6 +351,90 @@ def ramp_charts(ramp: dict, fred: dict) -> tuple[dict[str, dict], list[Pt], list
     return ind, yoy_total, anth_share
 
 
+# ----------------------------------------------------------------- memory (DRAM, NAND, HBM)
+ECOS_LINES = [("dram", "DRAM"), ("flash", "Флеш-память (NAND)"), ("storage_units", "Накопители"), ("system_semi", "Системные чипы, не память")]
+RETAIL_DAILY = [("ddr5", "DDR5"), ("ddr4", "DDR4"), ("ddr3", "DDR3")]
+RETAIL_MONTHLY = [("ddr5", "DDR5"), ("ddr4", "DDR4"), ("ddr3", "DDR3"), ("nand", "SSD (NAND)"), ("hdd", "HDD")]
+RAM_LADDER = [
+    ("ddr4_sodimm", "DDR4 ноутбук"), ("ddr4_udimm", "DDR4 десктоп"), ("ddr4_rdimm", "DDR4 сервер"),
+    ("ddr5_sodimm", "DDR5 ноутбук"), ("ddr5_udimm", "DDR5 десктоп"), ("ddr5_rdimm", "DDR5 сервер"),
+]
+STORAGE_LADDER = [("hdd", "HDD"), ("sata_ssd", "SSD SATA"), ("nvme_ssd", "SSD NVMe"), ("u2_ssd", "SSD U.2, серверный")]
+# One line per HBM generation: Silicon Analysts keeps separate "seed" and "contract" series for some of them.
+HBM_GENERATIONS = [
+    ("HBM2", ["hbm2"]),
+    ("HBM2E", ["hbm2e", "hbm2e-contract"]),
+    ("HBM3", ["hbm3", "hbm3-contract"]),
+    ("HBM3E", ["hbm3e", "hbm3e-contract"]),
+    ("HBM4", ["hbm4-contract"]),
+]
+CHIP_PARTS = [("chip_hbm", "HBM"), ("chip_logic", "Логика (кристалл)"), ("chip_packaging", "Корпусирование"), ("chip_auxiliary", "Прочее")]
+
+
+def yoy_monthly(pts: list[Pt]) -> list[Pt]:
+    """Percent change against the same month a year earlier (dates are first-of-month)."""
+    m = dict(pts)
+    out: list[Pt] = []
+    for d, v in pts:
+        prev = m.get(f"{int(d[:4]) - 1}{d[4:]}")
+        if prev:
+            out.append((d, (v / prev - 1) * 100))
+    return out
+
+
+def ladder(dp: dict, items: list[tuple[str, str]], what: str) -> dict:
+    """Latest median per product class as one bar set; {"lines": []} renders as 'no data'."""
+    cats, ys, ns, day = [], [], [], None
+    for key, label in items:
+        lv = latest(dp.get((key, "median"), []))
+        if not lv:
+            continue
+        cats.append(label)
+        ys.append(lv[1])
+        n = latest(dp.get((key, "listings"), []))
+        ns.append(int(n[1]) if n else 0)
+        day = max(day or lv[0], lv[0])
+    if not cats:
+        return {"lines": []}
+    return {"categories": cats, "bars": [{"name": what, "y": ys}], "note": f"{what} · {day} · позиций в выборке: от {min(ns)} до {max(ns)}"}
+
+
+def memory_charts(ecos: dict, cp: dict, stan: dict, dp: dict, sa: dict) -> tuple[dict[str, dict], dict[str, list[Pt]]]:
+    """-> (indicators, series for the overview tiles)."""
+    ind: dict[str, dict] = {}
+    # official export price indexes by type (Bank of Korea), contract-like
+    idx = {k: ecos.get((k, "export_price_usd"), []) for k, _ in ECOS_LINES}
+    ind["mem_export_idx"] = {"lines": [line(lbl, since(idx[k], "2015-01-01")) for k, lbl in ECOS_LINES if idx[k]]}
+    ind["mem_export_yoy"] = {"lines": [line(lbl, since(yoy_monthly(idx[k]), "2015-01-01")) for k, lbl in ECOS_LINES[:3] if idx[k]]}
+    # retail: daily medians (Newegg) and monthly cheapest listing (Amazon)
+    ind["mem_retail"] = {"lines": [line(lbl, cp[(k, "median")]) for k, lbl in RETAIL_DAILY if cp.get((k, "median"))]}
+    ind["mem_retail_monthly"] = {"lines": [line(lbl, since(stan[(k, "cheapest")], "2024-08-01")) for k, lbl in RETAIL_MONTHLY if stan.get((k, "cheapest"))]}
+    # form-factor and storage-class ladders (Amazon medians, latest day)
+    ind["mem_ladder"] = ladder(dp, RAM_LADDER, "медиана новых модулей на Amazon")
+    ind["storage_ladder"] = ladder(dp, STORAGE_LADDER, "медиана новых накопителей на Amazon")
+    # HBM $/GB by generation (press and analyst estimates)
+    hbm_lines = []
+    for label, keys in HBM_GENERATIONS:
+        merged: dict[str, float] = {}
+        for k in keys:  # later keys (contract series) win on the same date
+            merged.update(dict(sa.get((k, "usd_per_gb"), [])))
+        if merged:
+            hbm_lines.append(line(label, sorted(merged.items()), markers=True))
+    ind["mem_hbm"] = {"lines": hbm_lines[::-1]}  # newest generation first: it is the one the card headline quotes
+    # what an AI accelerator is made of: quarterly component spend (Epoch AI)
+    spend = {k: dict(stan.get((k, "spend"), [])) for k, _ in CHIP_PARTS}
+    days = sorted({d for m in spend.values() for d in m})
+    quarters = [quarter_label(d) for d in days]
+    total = [sum(m.get(d, 0.0) for m in spend.values()) for d in days]
+    yoy = [(total[i] / total[i - 4] - 1) * 100 if i >= 4 and total[i - 4] else None for i in range(len(total))]
+    ind["mem_hbm_spend"] = {
+        "lines": [{"name": lbl, "x": quarters, "y": [spend[k].get(d) for d in days]} for k, lbl in CHIP_PARTS if spend[k]],
+        "total": {"x": quarters, "y": total, "yoy": yoy},
+    }
+    tiles = {"dram_idx": idx["dram"], "ddr5": cp.get(("ddr5", "median"), []), "hbm4": sorted(dict(sa.get(("hbm4-contract", "usd_per_gb"), [])).items())}
+    return ind, tiles
+
+
 # ----------------------------------------------------------------- capex
 def quarter_label(d: str) -> str:
     y, m = int(d[:4]), int(d[5:7])
@@ -392,6 +476,11 @@ def build() -> dict:
     orp = source_map(df, "openrouter")
     oru = source_map(df, "openrouter_usage")
     ramp = source_map(df, "ramp")
+    ecos = source_map(df, "ecos")
+    cprices = source_map(df, "componentprices")
+    stanford = source_map(df, "stanford_memory")
+    diskp = source_map(df, "diskprices")
+    silicon = source_map(df, "siliconanalysts")
     tsmc = source_map(df, "tsmc")
     edgar = source_map(df, "edgar")
     fred = source_map(df, "fred")
@@ -434,6 +523,10 @@ def build() -> dict:
             line("B200", gph.get(("b200", "providers"), [])),
         ]
     }
+
+    # --- Memory
+    mem_ind, mem_tiles = memory_charts(ecos, cprices, stanford, diskp, silicon)
+    ind.update(mem_ind)
 
     # --- Tokens
     ind["tok_frontier"] = {"lines": tier_chart(lite, "frontier", CLOSED + ["deepseek", "moonshot", "qwen"])}
@@ -528,6 +621,9 @@ def build() -> dict:
     tiles = [
         tile("h100", "H100 SXM, аренда", h100_med, "usd_h", 30, "медиана gpuperhour"),
         tile("b200r", "B200 / H100", b200_ratio, "x", 30, "во сколько раз дороже"),
+        tile("mem_dram", "DRAM, экспорт Кореи", mem_tiles["dram_idx"], "index", 365, "индекс цен, 2020 = 100"),
+        tile("mem_ddr5", "DDR5, розница", mem_tiles["ddr5"], "usd_gb", 30, "медиана Newegg"),
+        tile("mem_hbm4", "HBM4, контракт", mem_tiles["hbm4"], "usd_gb", 365, "оценка по прессе"),
         tile("frontier", "Frontier, output", fr_mean, "usd_mtok", 90, "среднее OpenAI/Anthropic/Google"),
         tile("mid", "Mid-tier, output", mid_mean, "usd_mtok", 90, "среднее OpenAI/Anthropic/Google"),
         tile("ds", "DeepSeek vs mid-tier", ds_disc["x"] and list(zip(ds_disc["x"], ds_disc["y"])) if ds_disc else [], "x", 90, "цена DeepSeek / mid-tier"),

@@ -11,6 +11,11 @@ from ..model import Row
 USER_AGENT = "ai-indicators/0.1 (personal research dashboard; contact aofo.uae@gmail.com)"
 
 
+# Client name without contact details, for sources that need no contact address
+# (only SEC EDGAR asks for one) or that reject longer descriptive strings.
+GENERIC_USER_AGENT = "ai-indicators/0.1"
+
+
 class Collector(abc.ABC):
     """A collector fetches one external source and turns it into rows.
 
@@ -23,11 +28,12 @@ class Collector(abc.ABC):
     name: str
     raw_name: str
     timeout: float = 60.0
+    user_agent: str = USER_AGENT
 
     def client(self) -> httpx.Client:
         return httpx.Client(
             timeout=self.timeout,
-            headers={"User-Agent": USER_AGENT, "Accept": "application/json, text/csv, text/html;q=0.5"},
+            headers={"User-Agent": self.user_agent, "Accept": "application/json, text/csv, text/html;q=0.5"},
             follow_redirects=True,
         )
 

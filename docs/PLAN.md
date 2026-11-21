@@ -75,7 +75,8 @@
 | Индикатор | Зачем | Источник |
 |---|---|---|
 | TSMC monthly revenue, YoY | опережает квартальные отчёты NVDA | `investor.tsmc.com/english/monthly-revenue` HTML/XLSX, ~10 числа |
-| HBM $/GB (HBM3E, HBM4) | узкое место Blackwell/Rubin | Silicon Analysts `siliconanalysts.com/market-data/hbm-pricing` (последние точки бесплатно) |
+| HBM $/GB (HBM3E, HBM4) | узкое место Blackwell/Rubin | **сделано** (`siliconanalysts`): `siliconanalysts.com/api/v1/market-data/hbm-pricing`, последние точки бесплатно |
+| Цены памяти по типам: DRAM, NAND, розница DDR3/4/5, серверная RDIMM, SSD/HDD | цикл памяти, вытеснение обычной DRAM производством HBM | **сделано** (`ecos`, `componentprices`, `stanford_memory`, `diskprices`): Bank of Korea 402Y016, componentprices.com, Stanford DAM, diskprices.com. Спот DRAMeXchange/TrendForce и CFM не берём: условия запрещают публикацию |
 | Korea semiconductor exports (first 20 days) | самый ранний месячный сигнал по памяти | Korea Customs Service, пресс-релиз 21 числа; парсить |
 | TrendForce headlines (DRAM/HBM contract) | текстовые алерты | RSS `trendforce.com/feed/Semiconductors.html` |
 | Micron / SK hynix revenue, guidance | HBM-капасити | EDGAR XBRL (Micron CIK 723125), DART API для SK hynix |

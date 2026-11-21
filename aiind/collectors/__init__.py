@@ -1,4 +1,7 @@
 from .base import Collector
+from .componentprices import ComponentPrices
+from .diskprices import DiskPrices
+from .ecos import Ecos
 from .edgar import Edgar
 from .fred import Fred
 from .gpuperhour import GpuPerHour
@@ -12,6 +15,8 @@ from .ornn import Ornn
 from .pypistats import PyPIStats
 from .ramp import Ramp
 from .runpod import RunPod
+from .siliconanalysts import SiliconAnalysts
+from .stanford_memory import StanfordMemory
 from .tsmc import Tsmc
 from .yahoo import Yahoo
 
@@ -33,6 +38,11 @@ REGISTRY: dict[str, type[Collector]] = {
         Npm,
         Tsmc,
         Ramp,
+        Ecos,
+        ComponentPrices,
+        StanfordMemory,
+        DiskPrices,
+        SiliconAnalysts,
     )
 }
 

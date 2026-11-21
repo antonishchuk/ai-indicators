@@ -13,6 +13,10 @@ USD_PER_MTOK = "usd_per_mtok"  # US dollars per 1M tokens
 USD = "usd"
 RATIO = "ratio"
 COUNT = "count"
+USD_PER_GB = "usd_per_gb"
+USD_PER_TB = "usd_per_tb"
+USD_BILLION = "usd_billion"
+PCT = "pct"
 
 
 class Row(BaseModel):
