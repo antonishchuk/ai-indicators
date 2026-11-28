@@ -1,5 +1,5 @@
 {
- "date": "2026-11-27",
+ "date": "2026-11-28",
  "ok": [
   "openrouter",
   "openrouter_endpoints",
@@ -14,6 +14,7 @@
   "fred",
   "pypistats",
   "npm",
+  "tsmc",
   "ramp",
   "ecos",
   "componentprices",
@@ -21,7 +22,5 @@
   "diskprices",
   "siliconanalysts"
  ],
- "failed": [
-  "tsmc"
- ]
+ "failed": []
 }
